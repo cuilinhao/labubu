@@ -1,155 +1,266 @@
-import { notFound } from "next/navigation"
+"use client"
+
+import { useState, useEffect } from "react"
+import { useParams } from "next/navigation"
 import Image from "next/image"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { ArrowLeft, Calendar, Eye } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { ArrowLeft, Download, Eye, Heart, Share } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
+import type { WallpaperItem } from "@/lib/types"
 
-interface WallpaperItem {
-  id: string
-  title: string
-  description_md: string
-  cover_url: string
-  click_count: number
-  created_at: string
-}
+export default function ItemDetailPage() {
+  const params = useParams()
+  const id = params.id as string
+  const [item, setItem] = useState<WallpaperItem | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const { toast } = useToast()
 
-// Mock data - in real app this would come from Supabase
-const mockItems: Record<string, WallpaperItem> = {
-  "1": {
-    id: "1",
-    title: "Labubu 梦幻森林",
-    description_md: `# Labubu 梦幻森林动态壁纸
+  useEffect(() => {
+    async function fetchItem() {
+      try {
+        setLoading(true)
+        const response = await fetch(`/api/items/${id}`)
+        
+        if (response.status === 404) {
+          setError('壁纸不存在')
+          return
+        }
+        
+        if (!response.ok) {
+          throw new Error('Failed to fetch item')
+        }
+        
+        const data = await response.json()
+        setItem(data)
+      } catch (err) {
+        console.error('Error fetching item:', err)
+        setError('加载失败，请稍后重试')
+      } finally {
+        setLoading(false)
+      }
+    }
 
-这是一款精美的 Labubu 主题动态壁纸，展现了可爱的 Labubu 在梦幻森林中的冒险场景。
+    if (id) {
+      fetchItem()
+    }
+  }, [id])
 
-![Labubu在森林中探险](/placeholder.svg?height=300&width=500&text=森林探险场景)
+  const handleDownload = async () => {
+    if (!item) return
+    
+    try {
+      // 增加点击计数
+      await fetch('/api/increment_click', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ id: item.id }),
+      })
 
-## 特色功能
-- **高清画质**：支持 4K 分辨率
-- **流畅动画**：60fps 丝滑体验  
-- **低功耗**：优化算法，省电模式
-- **多设备适配**：支持手机、平板、电脑
+      // 更新本地显示的点击数
+      setItem(prev => prev ? {
+        ...prev,
+        click_count: (prev.click_count || 0) + 1
+      } : null)
 
-![Labubu与森林小动物互动](/placeholder.svg?height=250&width=500&text=与小动物互动)
+      toast({
+        description: "感谢下载！正在跳转到下载页面...",
+      })
+      
+      // 跳转到下载页面
+      window.location.href = `/download/${item.id}`
+    } catch (error) {
+      console.error('Error updating click count:', error)
+      // 即使更新失败也允许下载
+      window.location.href = `/download/${item.id}`
+    }
+  }
 
-## 使用说明
-1. 下载壁纸文件
-2. 在设备上设置为动态壁纸
-3. 享受 Labubu 的可爱陪伴
+  if (loading) {
+    return <DetailSkeleton />
+  }
 
-## 预览效果
-
-下面是壁纸的动态效果预览：
-
-![动态效果预览图](/placeholder.svg?height=350&width=500&text=动态效果预览)
-
-*注意：部分设备可能需要安装动态壁纸应用*
-
-## 技术参数
-- **分辨率**：3840×2160 (4K)
-- **帧率**：60 FPS
-- **文件大小**：约 15MB
-- **支持格式**：MP4, Live Photo`,
-    cover_url: "/placeholder.svg?height=600&width=400",
-    click_count: 1234,
-    created_at: "2024-01-15",
-  },
-}
-
-export default async function ItemPage({
-  params,
-}: {
-  params: Promise<{ id: string }>
-}) {
-  const { id } = await params
-  const item = mockItems[id]
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-50 flex items-center justify-center">
+        <Card className="max-w-md mx-auto">
+          <CardContent className="text-center py-8">
+            <p className="text-red-500 mb-4">{error}</p>
+            <div className="space-y-2">
+              <Button asChild variant="outline">
+                <Link href="/">
+                  <ArrowLeft className="w-4 h-4 mr-2" />
+                  返回首页
+                </Link>
+              </Button>
+              <br />
+              <Button 
+                onClick={() => window.location.reload()} 
+                variant="ghost"
+              >
+                重新加载
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
 
   if (!item) {
-    notFound()
+    return null
   }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-50">
-      <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b">
-        <div className="container mx-auto px-4 py-4">
-          <Link
-            href="/"
-            className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" />
+      <div className="container mx-auto px-4 py-8">
+        {/* Back Button */}
+        <Button asChild variant="ghost" className="mb-6">
+          <Link href="/">
+            <ArrowLeft className="w-4 h-4 mr-2" />
             返回首页
           </Link>
-        </div>
-      </header>
+        </Button>
 
-      <main className="container mx-auto px-4 py-8 max-w-4xl">
-        <div className="grid gap-8">
-          {/* Hero Image */}
-          <Card className="overflow-hidden">
-            <div className="relative max-h-[70vh] overflow-hidden">
-              <Image
-                src={item.cover_url || "/placeholder.svg"}
-                alt={item.title}
-                width={800}
-                height={600}
-                className="w-full h-auto object-cover"
-                priority
-              />
+        <div className="grid md:grid-cols-2 gap-8 max-w-6xl mx-auto">
+          {/* Cover Image */}
+          <div className="space-y-4">
+            <Card className="overflow-hidden">
+              <div className="aspect-[3/4] relative">
+                <Image
+                  src={item.cover_url || "/placeholder.svg"}
+                  alt={item.title}
+                  fill
+                  className="object-cover"
+                />
+              </div>
+            </Card>
+
+            {/* Action Buttons */}
+            <div className="grid grid-cols-2 gap-3">
+              <Button onClick={handleDownload} size="lg" className="w-full">
+                <Download className="w-5 h-5 mr-2" />
+                立即下载
+              </Button>
+              <Button variant="outline" size="lg">
+                <Heart className="w-5 h-5 mr-2" />
+                收藏
+              </Button>
             </div>
-          </Card>
+            <Button variant="outline" size="lg" className="w-full">
+              <Share className="w-5 h-5 mr-2" />
+              分享
+            </Button>
+          </div>
 
           {/* Content */}
-          <div className="grid gap-6">
-            <div className="flex items-start justify-between">
-              <div>
-                <h1 className="text-3xl font-bold mb-2">{item.title}</h1>
-                <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                  <div className="flex items-center gap-1">
-                    <Calendar className="w-4 h-4" />
-                    <span>{new Date(item.created_at).toLocaleDateString("zh-CN")}</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Eye className="w-4 h-4" />
-                    <span>{item.click_count} 次查看</span>
-                  </div>
+          <div className="space-y-6">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900 mb-4">{item.title}</h1>
+
+              <div className="flex items-center gap-4 text-sm text-gray-600 mb-6">
+                <div className="flex items-center gap-1">
+                  <Eye className="w-4 h-4" />
+                  <span>{item.click_count?.toLocaleString() || 0} 次查看</span>
                 </div>
+                <div className="flex items-center gap-1">
+                  <Download className="w-4 h-4" />
+                  <span>免费下载</span>
+                </div>
+              </div>
+
+              <div className="flex gap-2 mb-6">
+                <Badge variant="secondary">动态壁纸</Badge>
+                <Badge variant="secondary">Labubu</Badge>
+                <Badge variant="secondary">高清</Badge>
               </div>
             </div>
 
+            {/* Description */}
             <Card>
               <CardContent className="p-6">
-                <div
-                  className="prose prose-gray max-w-none dark:prose-invert prose-img:rounded-lg prose-img:shadow-lg"
-                  dangerouslySetInnerHTML={{
-                    __html: item.description_md
-                      .replace(/\n/g, "<br>")
-                      .replace(/## (.*)/g, "<h2 class='text-xl font-bold mt-6 mb-3 text-gray-800'>$1</h2>")
-                      .replace(/# (.*)/g, "<h1 class='text-2xl font-bold mt-8 mb-4 text-gray-900'>$1</h1>")
-                      .replace(
-                        /!\[(.*?)\]$$(.*?)$$/g,
-                        '<img src="$2" alt="$1" class="w-full max-w-lg mx-auto my-6 rounded-lg shadow-md hover:shadow-xl transition-shadow duration-300" />',
-                      )
-                      .replace(/\*\*(.*?)\*\*/g, "<strong class='font-semibold text-purple-700'>$1</strong>")
-                      .replace(/\*(.*?)\*/g, "<em class='italic'>$1</em>"),
-                  }}
-                />
+                <h2 className="text-xl font-semibold mb-4">壁纸介绍</h2>
+                <div className="prose prose-sm max-w-none">
+                  {item.description ? (
+                    <div dangerouslySetInnerHTML={{ 
+                      __html: item.description.replace(/\n/g, '<br>')
+                    }} />
+                  ) : (
+                    <p>暂无详细介绍</p>
+                  )}
+                </div>
               </CardContent>
             </Card>
 
-            <div className="flex justify-center">
-              <Link href={`/download/${item.id}`}>
-                <Button
-                  size="lg"
-                  className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
-                >
-                  获取百度网盘链接
-                </Button>
-              </Link>
-            </div>
+            {/* Download Info */}
+            <Card>
+              <CardContent className="p-6">
+                <h2 className="text-xl font-semibold mb-4">下载信息</h2>
+                <div className="space-y-2 text-sm text-gray-600">
+                  <div className="flex justify-between">
+                    <span>文件格式</span>
+                    <span>MP4 / GIF</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>分辨率</span>
+                    <span>1080P / 4K</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>文件大小</span>
+                    <span>约 10-50MB</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>支持设备</span>
+                    <span>手机 / 平板 / 电脑</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </div>
-      </main>
+      </div>
+    </div>
+  )
+}
+
+// 详情页骨架屏
+function DetailSkeleton() {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-50">
+      <div className="container mx-auto px-4 py-8">
+        <div className="h-8 w-24 bg-gray-200 rounded mb-6 animate-pulse" />
+        
+        <div className="grid md:grid-cols-2 gap-8 max-w-6xl mx-auto">
+          <div className="space-y-4">
+            <div className="aspect-[3/4] bg-gray-200 rounded-lg animate-pulse" />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="h-12 bg-gray-200 rounded animate-pulse" />
+              <div className="h-12 bg-gray-200 rounded animate-pulse" />
+            </div>
+            <div className="h-12 bg-gray-200 rounded animate-pulse" />
+          </div>
+          
+          <div className="space-y-6">
+            <div>
+              <div className="h-8 bg-gray-200 rounded w-3/4 mb-4 animate-pulse" />
+              <div className="h-4 bg-gray-200 rounded w-1/2 mb-6 animate-pulse" />
+              <div className="flex gap-2 mb-6">
+                <div className="h-6 w-16 bg-gray-200 rounded animate-pulse" />
+                <div className="h-6 w-16 bg-gray-200 rounded animate-pulse" />
+                <div className="h-6 w-12 bg-gray-200 rounded animate-pulse" />
+              </div>
+            </div>
+            
+            <div className="h-48 bg-gray-200 rounded-lg animate-pulse" />
+            <div className="h-40 bg-gray-200 rounded-lg animate-pulse" />
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

@@ -11,9 +11,10 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ArrowLeft, LogIn } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { createClient } from "@/lib/supabase/client"
 
 export default function AdminLoginPage() {
-  const [account, setAccount] = useState("")
+  const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
   const router = useRouter()
@@ -23,28 +24,41 @@ export default function AdminLoginPage() {
     e.preventDefault()
     setLoading(true)
 
-    // Mock login - 账号：admin，密码：123456
-    setTimeout(() => {
-      if (account === "admin" && password === "123456") {
-        // 设置登录状态 cookie
-        document.cookie = "admin-session=true; path=/; max-age=86400" // 24小时有效
-        
+    try {
+      const supabase = createClient()
+      
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
+
+      if (error) {
+        toast({
+          variant: "destructive",
+          description: error.message === "Invalid login credentials" 
+            ? "邮箱或密码错误" 
+            : "登录失败，请稍后重试",
+        })
+        return
+      }
+
+      if (data.user) {
         toast({
           description: "登录成功",
         })
         
-        // 延迟跳转，确保 cookie 已设置
-        setTimeout(() => {
-          router.push("/admin/upload")
-        }, 500)
-      } else {
-        toast({
-          variant: "destructive",
-          description: "账号或密码错误",
-        })
+        // 跳转到上传页面
+        router.push("/admin/upload")
       }
+    } catch (error) {
+      console.error('Login error:', error)
+      toast({
+        variant: "destructive",
+        description: "登录失败，请稍后重试",
+      })
+    } finally {
       setLoading(false)
-    }, 1000)
+    }
   }
 
   return (
@@ -58,13 +72,13 @@ export default function AdminLoginPage() {
         <CardContent>
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="account">账号</Label>
+              <Label htmlFor="email">邮箱</Label>
               <Input
-                id="account"
-                type="text"
-                placeholder="admin"
-                value={account}
-                onChange={(e) => setAccount(e.target.value)}
+                id="email"
+                type="email"
+                placeholder="admin@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 required
               />
             </div>
@@ -102,11 +116,9 @@ export default function AdminLoginPage() {
           </form>
 
           <div className="mt-4 p-3 bg-muted rounded-lg text-xs text-muted-foreground">
-            <strong>演示账号：</strong>
+            <strong>提示：</strong>
             <br />
-            账号: admin
-            <br />
-            密码: 123456
+            请使用在 Supabase Dashboard 中创建的管理员账号登录
           </div>
         </CardContent>
       </Card>
